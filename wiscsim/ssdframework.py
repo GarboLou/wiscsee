@@ -15,6 +15,7 @@ import bidict
 import config
 from commons import *
 from ftlsim_commons import *
+from mp_utils import *
 import flash
 import controller
 import ftlbuilder
@@ -46,7 +47,7 @@ class Ssd(SsdBase):
         self.flash_controller = controller.Controller3(
                 self.env, self.conf, self.recorder)
 
-        print 'initializing ssd...........', self.conf['ftl_type']
+        log_msg('initializing ssd...........', self.conf['ftl_type'])
 
         self.ftl = self._create_ftl()
 
@@ -86,7 +87,11 @@ class Ssd(SsdBase):
 
     def _process(self, pid):
         for req_i in itertools.count():
-            host_event = yield self.ncq.queue.get()
+            #host_event = yield self.ncq.queue.get()
+            if len(self.ncq.queue) > 0:
+                host_event, _ = self.ncq.queue.popitem(last=False)
+            else:
+                break
 
             slot_req = self.ncq.slots.request()
             yield slot_req
@@ -104,9 +109,11 @@ class Ssd(SsdBase):
                 pass
 
             elif operation == OP_SHUT_SSD:
-                print 'got shut_ssd'
+                log_msg('Stop Simulation')
                 sys.stdout.flush()
-                yield self.env.process(self._end_all_processes())
+                # yield self.env.process(self._end_all_processes())
+                self.ftl.end()
+                self._end_all_processes()
 
             elif operation == OP_BARRIER:
                 # The correct way of doing barrier is to use
@@ -231,10 +238,6 @@ class Ssd(SsdBase):
                 raise NotImplementedError("Operation {} not supported."\
                         .format(host_event.operation))
 
-            if req_i % 1000 == 0:
-                print '.',
-                sys.stdout.flush()
-
             if self.gc_sleep_timer > 0:
                 self.gc_sleep_timer -= 1
 
@@ -250,8 +253,10 @@ class Ssd(SsdBase):
 
     def _end_all_processes(self):
         for i in range(self.n_processes):
-            yield self.ncq.queue.put(
-                hostevent.ControlEvent(OP_END_SSD_PROCESS))
+            # yield self.ncq.queue.put(
+            #     hostevent.ControlEvent(OP_END_SSD_PROCESS))
+            self.ncq.queue[
+                hostevent.ControlEvent(OP_END_SSD_PROCESS)] = ""
         self._snapshot_valid_ratios = False
         self._snapshot_erasure_count_dist = False
         self._do_wear_leveling = False
@@ -263,7 +268,6 @@ class Ssd(SsdBase):
             yield self.env.process(self.ftl.clean(forced))
 
     def _wear_leveling_process(self):
-        print 'wear leveling process start'
         while self._do_wear_leveling is True:
             yield self.env.timeout(self._wear_leveling_check_interval)
             if self.ftl.is_wear_leveling_needed() is True:
@@ -271,7 +275,6 @@ class Ssd(SsdBase):
                 yield self.env.process(self.ftl.level_wear())
             else:
                 print 'skip wear leveling'
-        print 'wear leveling process ends'
 
 
     def _valid_ratio_snapshot_process(self):
@@ -295,17 +298,17 @@ class Ssd(SsdBase):
             p = self.env.process( self._process(i) )
             procs.append(p)
 
-        p = self.env.process( self._valid_ratio_snapshot_process() )
-        procs.append(p)
+        # p = self.env.process( self._valid_ratio_snapshot_process() )
+        # procs.append(p)
 
-        p = self.env.process( self._erasure_count_dist_snapshot_process() )
-        procs.append(p)
+        # p = self.env.process( self._erasure_count_dist_snapshot_process() )
+        # procs.append(p)
 
-        p = self.env.process( self._wear_leveling_process() )
-        procs.append(p)
+        # p = self.env.process( self._wear_leveling_process() )
+        # procs.append(p)
 
-        p = self.env.process( self._user_traffic_size_snapshot_process() )
-        procs.append(p)
+        # p = self.env.process( self._user_traffic_size_snapshot_process() )
+        # procs.append(p)
 
         yield simpy.events.AllOf(self.env, procs)
 

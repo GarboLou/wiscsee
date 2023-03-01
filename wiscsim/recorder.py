@@ -210,13 +210,13 @@ class Recorder(object):
             fd = open( os.path.join( self.output_directory, filename ), 'wr+')
             self.file_pool[filename] = fd
             self.file_colnames[filename] = kwargs.keys()
-            colnames = [str(colname).rjust(width) for colname in kwargs.keys()]
+            colnames = [str(colname).ljust(width) for colname in kwargs.keys()]
             fd.write(' '.join(colnames) + '\n')
         else:
             fd = self.file_pool[filename]
 
         colnames = self.file_colnames[filename]
-        args = [str(kwargs[colname]).rjust(width) for colname in colnames]
+        args = [str(kwargs[colname]).ljust(width) for colname in colnames]
         fd.write(' '.join(args) + '\n')
 
     def debug(self, *args):

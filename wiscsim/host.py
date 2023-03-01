@@ -23,10 +23,14 @@ class Host(object):
                 continue
 
             if event.action == 'D':
-                yield self._ncq.queue.put(event)
+                # yield self._ncq.queue.put(event)
+                self._ncq.queue[event] = ""
+        self._ncq.queue[hostevent.ControlEvent(OP_SHUT_SSD)] = ""
 
     def run(self):
-        yield self.env.process(self._process())
-        yield self._ncq.queue.put(hostevent.ControlEvent(OP_SHUT_SSD))
+        # yield self.env.process(self._process())
+        # yield self._ncq.queue.put(hostevent.ControlEvent(OP_SHUT_SSD))
+        self._process()
+        yield simpy.AllOf(self.env, [])
 
 

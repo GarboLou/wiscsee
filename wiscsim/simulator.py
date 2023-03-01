@@ -80,8 +80,8 @@ class SimulatorDESNew(Simulator):
 
     def record_post_run_stats(self):
         self.recorder.set_result_by_one_key(
-                'simulation_duration', self.env.now)
-        pprint.pprint(self.recorder.get_result_summary())
+                'workload_completion_time (ns)', self.env.now)
+        # pprint.pprint(self.recorder.get_result_summary())
 
         self.recorder.close()
 

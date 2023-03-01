@@ -157,10 +157,10 @@ def runtime_update(conf):
         fs = str(conf['filesystem'])
     else:
         fs = 'fsnotset'
-    conf['result_dir'] = "{targetdir}/{expname}/{subexpname}-{unique}".format(
-        targetdir = conf['targetdir'], expname = conf['expname'],
-        subexpname = conf['subexpname'],
-        unique = '-'.join((fs, conf['time'], str(conf['hash']))))
+    # conf['result_dir'] = "{targetdir}/{expname}/{subexpname}-{unique}".format(
+    #     targetdir = conf['targetdir'], expname = conf['expname'],
+    #     subexpname = conf['subexpname'],
+    #     unique = '-'.join((fs, conf['time'], str(conf['hash']))))
 
 
 def choose_exp_metadata(default_conf, interactive = True):

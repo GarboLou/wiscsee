@@ -1,5 +1,5 @@
 import bitarray
-from collections import deque, Counter
+from collections import deque, Counter, defaultdict
 import csv
 import datetime
 import heapq
@@ -11,10 +11,12 @@ import sys
 import simpy
 
 import bidict
+import numpy as np
 
 import config
 import flash
 import ftlbuilder
+from mp_utils import *
 from lrulist import LruDict, SegmentedLruCache, LruCache
 import recorder
 from utilities import utils
@@ -70,6 +72,8 @@ DATA_USER = "data.user"
 # erase data block in clean_data_block()
 # move data page during gc (including read and write)
 DATA_CLEANING = "data.cleaning"
+
+latency_counter = {"read" : [], "write" : [], "gc" : []}
 
 
 
@@ -127,7 +131,7 @@ class Ftl(object):
         self.pre_written_bytes = 0
         self.pre_discarded_bytes = 0
         self.pre_read_bytes = 0
-        self.display_interval = 4 * MB
+        self.display_interval = 100 * MB
 
     def _check_segment_config(self):
         if self.conf['segment_bytes'] % (self.conf.n_pages_per_block \
@@ -161,12 +165,21 @@ class Ftl(object):
         yield self.env.process(self._mappings.flush())
         self._mappings.drop()
 
+    def end(self):
+        self.recorder.set_result_by_one_key('average_read_latency_per_page (ns)', np.average(latency_counter["read"]))
+        self.recorder.set_result_by_one_key('average_write_latency_per_page (ns)', np.average(latency_counter["write"]))
+        self.recorder.set_result_by_one_key('99.99%_read_latency_per_page (ns)', np.percentile(latency_counter["read"], 99))
+        self.recorder.set_result_by_one_key('99.99%_write_latency_per_page (ns)', np.percentile(latency_counter["write"], 99))
+        self.recorder.set_result_by_one_key('99.9999%_read_latency_per_page (ns)', np.percentile(latency_counter["read"], 99.9999))
+        self.recorder.set_result_by_one_key('99.9999%_write_latency_per_page (ns)', np.percentile(latency_counter["write"], 99.9999))
+        self.recorder.set_result_by_one_key('total_gc_time (ns)', np.sum(latency_counter["gc"]))
+
     def write_ext(self, extent):
         req_size = extent.lpn_count * self.conf.page_size
         self.recorder.add_to_general_accumulater('traffic', 'write', req_size)
         self.written_bytes += req_size
         if self.written_bytes > self.pre_written_bytes + self.display_interval:
-            print 'Written (MB)', self.pre_written_bytes / MB, 'writing', round(float(req_size) / MB, 2)
+            log_msg('Written (MB)', self.written_bytes / MB, 'Simulator time (ns)', self.env.now)
             sys.stdout.flush()
             self.pre_written_bytes = self.written_bytes
 
@@ -187,7 +200,7 @@ class Ftl(object):
         yield simpy.events.AllOf(self.env, procs)
 
         write_timeline(self.conf, self.recorder,
-            op_id = op_id, op = 'write_ext', arg = extent.lpn_start,
+            op_id = op_id, op = 'write_ext', arg = extent.lpn_count,
             start_time = start_time, end_time = self.env.now)
 
     def _write_single_mvpngroup(self, ext_single_m_vpn, ppns_to_write,
@@ -212,9 +225,9 @@ class Ftl(object):
             self.flash.rw_ppns(ppns_to_write, 'write',
                 tag = channel_tag))
 
-        write_timeline(self.conf, self.recorder,
-            op_id = op_id, op = 'write_user_data', arg = len(ppns_to_write),
-            start_time = start_time, end_time = self.env.now)
+        # write_timeline(self.conf, self.recorder,
+        #     op_id = op_id, op = 'write_user_data', arg = len(ppns_to_write),
+        #     start_time = start_time, end_time = self.env.now)
 
     def _update_metadata_for_relocating_lpns(self, lpns, new_ppns, tag=None):
         """
@@ -276,7 +289,7 @@ class Ftl(object):
         self.recorder.add_to_general_accumulater('traffic', 'read', req_size)
         self.read_bytes += req_size
         if self.read_bytes > self.pre_read_bytes + self.display_interval:
-            print 'Read (MB)', self.pre_read_bytes / MB, 'reading', round(float(req_size) / MB, 2)
+            log_msg('Read (MB)', self.read_bytes / MB, 'Simulator time (ns)', self.env.now)
             sys.stdout.flush()
             self.pre_read_bytes = self.read_bytes
 
@@ -295,7 +308,7 @@ class Ftl(object):
         yield simpy.events.AllOf(self.env, procs)
 
         write_timeline(self.conf, self.recorder,
-            op_id = op_id, op = 'read_ext', arg = extent.lpn_start,
+            op_id = op_id, op = 'read_ext', arg = extent.lpn_count,
             start_time = start_time, end_time = self.env.now)
 
     def _read_single_mvpngroup(self, ext_single_m_vpn, tag=None):
@@ -307,7 +320,6 @@ class Ftl(object):
                     tag=tag))
         ppns_to_read = remove_invalid_ppns(ppns_to_read)
 
-
         op_id = self.recorder.get_unique_num()
         start_time = self.env.now
 
@@ -315,9 +327,9 @@ class Ftl(object):
             self.flash.rw_ppns(ppns_to_read, 'read',
                 tag=self.recorder.get_tag('read_user', tag)))
 
-        write_timeline(self.conf, self.recorder,
-            op_id=op_id, op='read_user_data', arg=len(ppns_to_read),
-            start_time = start_time, end_time = self.env.now)
+        # write_timeline(self.conf, self.recorder,
+        #     op_id=op_id, op='read_user_data', arg=len(ppns_to_read),
+        #     start_time = start_time, end_time = self.env.now)
 
     def discard_ext(self, extent):
         req_size = extent.lpn_count * self.conf.page_size
@@ -374,6 +386,7 @@ class Ftl(object):
                 ratios)
 
     def snapshot_user_traffic(self):
+        return
         self.recorder.append_to_value_list('ftl_func_user_traffic',
                 {'timestamp': self.env.now/float(SEC),
                  'write_traffic_size': self.written_bytes,
@@ -536,7 +549,7 @@ class InsertMixin(object):
         self.env.exit(locked_row_ids)
 
     def __evict_entry_for_insert(self, tag=None):
-        victim_row = self._victim_row(avoid_m_vpns=[])
+        victim_row = self._victim_row(1, avoid_m_vpns=[])
         victim_row.state = USED_AND_HOLD
 
         yield self._concurrent_trans_quota.get(1)
@@ -611,45 +624,57 @@ class LoadMixin(object):
         self.env.exit((loaded, ppn))
 
     def __add_locked_room_for_load(self, n_needed, loading_m_vpn, tag=None):
-        locked_row_ids = []
-        for i in range(n_needed):
-            row_id = yield self.env.process(
-                    self.__evict_entry_for_load(loading_m_vpn, tag))
-            locked_row_ids.append(row_id)
+        # locked_row_ids = []
+        # for i in range(n_needed):
+        #     row_id = yield self.env.process(
+        #             self.__evict_entry_for_load(loading_m_vpn, tag))
+        #     locked_row_ids.append(row_id)
 
+        locked_row_ids = yield self.env.process(
+                    self.__evict_entry_for_load(n_needed, loading_m_vpn, tag))
         self.env.exit(locked_row_ids)
 
-    def __evict_entry_for_load(self, loading_m_vpn, tag=None):
-        victim_row = self._victim_row(
+    def __evict_entry_for_load(self, n_needed, loading_m_vpn, tag=None):
+        locked_row_ids = []
+        victim_rows = self._victim_row(n_needed,
                 [loading_m_vpn] + list(self._trans_page_locks.locked_addrs))
-        victim_row.state = USED_AND_HOLD
 
-        m_vpn = self.conf.lpn_to_m_vpn(lpn = victim_row.lpn)
+        m_vpns = defaultdict(list)
+        for victim_row in victim_rows:
+            victim_row.state = USED_AND_HOLD
 
-        tp_req = self._trans_page_locks.get_request(m_vpn)
-        yield tp_req
-        self._trans_page_locks.locked_addrs.add(m_vpn)
+            m_vpn = self.conf.lpn_to_m_vpn(lpn = victim_row.lpn)
+            m_vpns[m_vpn].append(victim_row)
 
-        if victim_row.dirty == True:
-            self.recorder.count_me('translation', 'write-back-dirty-for-load')
-            yield self.env.process(self._write_back(m_vpn, tag))
+        #tp_req = self._trans_page_locks.get_request(m_vpn)
+        #yield tp_req
+        for m_vpn, victims in m_vpns.items():
+            self._trans_page_locks.locked_addrs.add(m_vpn)
 
-        # after writing back, this lpn could already been deleted
-        # by another _evict_entry()?
-        assert self._lpn_table.has_lpn(victim_row.lpn), \
-                "lpn_table does not has lpn {}.".format(victim_row.lpn)
-        # assert victim_row.dirty == False, repr(victim_row)
-        assert victim_row.state == USED_AND_HOLD
-        victim_row.state = USED
+            written_back = False
+            for victim_row in victims:
+                if victim_row.dirty and not written_back:
+                    self.recorder.count_me('translation', 'write-back-dirty-for-load')
+                    yield self.env.process(self._write_back(m_vpn, tag))
+                    written_back = True
 
-        # This is the only place that we delete a lpn
-        self.recorder.count_me('translation', 'delete-lpn-in-table-for-load')
-        locked_row_id = self._lpn_table.delete_lpn_and_lock(victim_row.lpn)
+                # after writing back, this lpn could already been deleted
+                # by another _evict_entry()?
+                assert self._lpn_table.has_lpn(victim_row.lpn), \
+                        "lpn_table does not has lpn {}.".format(victim_row.lpn)
+                # assert victim_row.dirty == False, repr(victim_row)
+                assert victim_row.state == USED_AND_HOLD
+                victim_row.state = USED
 
-        self._trans_page_locks.release_request(m_vpn, tp_req)
-        self._trans_page_locks.locked_addrs.remove(m_vpn)
+                # This is the only place that we delete a lpn
+                self.recorder.count_me('translation', 'delete-lpn-in-table-for-load')
+                locked_row_id = self._lpn_table.delete_lpn_and_lock(victim_row.lpn)
+                locked_row_ids.append(locked_row_id)
 
-        self.env.exit(locked_row_id)
+            #self._trans_page_locks.release_request(m_vpn, tp_req)
+            self._trans_page_locks.locked_addrs.remove(m_vpn)
+
+        self.env.exit(locked_row_ids)
 
     def __load_to_locked_space(self, m_vpn, locked_rows, tag=None):
         """
@@ -721,7 +746,6 @@ class MappingCache(FlashTransmitMixin, InsertMixin, LoadMixin, FlushMixin):
 
         n_cache_tps = self.conf.n_cache_entries / self.conf.n_mapping_entries_per_page
         capsize = max(n_cache_tps - 1, 2)
-        print 'max number of tps in cache', n_cache_tps
         self._concurrent_trans_quota = simpy.Container(self.env, init=capsize,
                 capacity=capsize)
         self._m_vpn_interface_lock = LockPool(self.env)
@@ -795,14 +819,20 @@ class MappingCache(FlashTransmitMixin, InsertMixin, LoadMixin, FlushMixin):
         for lpn, row in self._lpn_table.least_to_most_lpn_items():
             self.recorder.count_me('translation', 'delete-lpn-in-table-for-drop')
             self._lpn_table.delete_lpn_and_lock(lpn)
-            row.state = FREE
+            self._lpn_table.free_row(lpn)
 
-    def _victim_row(self, avoid_m_vpns):
+    # FIXME: bottleneck
+    def _victim_row(self, n, avoid_m_vpns):
+        got = 0
+        rows = []
         for lpn, row in self._lpn_table.least_to_most_lpn_items():
             if row.state == USED:
                 m_vpn = self.conf.lpn_to_m_vpn(lpn)
                 if not m_vpn in avoid_m_vpns:
-                    return row
+                    rows.append(row)
+                    got += 1
+                if got >= n:
+                    return rows
         raise RuntimeError("Cannot find a victim. Current stats: {}"\
                 ", avoid_m_vpns: {}.\n"
                 .format(str(self._lpn_table.stats()), avoid_m_vpns))
@@ -822,6 +852,7 @@ class LpnTable(object):
         # self._lpn_to_row = SegmentedLruCache(n_rows, 0.5)
         # self._lpn_to_row = LruDict()
         self._lpn_to_row = LruCache()
+        self.free_list = [i for i in range(self._n_rows)]
 
     def _fresh_rows(self):
          return [
@@ -841,7 +872,7 @@ class LpnTable(object):
         return counter
 
     def n_free_rows(self):
-        return self._count_states()[FREE]
+        return len(self.free_list) > 0
 
     def n_locked_free_rows(self):
         return self._count_states()[FREE_AND_LOCKED]
@@ -854,10 +885,11 @@ class LpnTable(object):
 
     def lock_free_row(self):
         """FREE TO FREE_AND_LOCKED"""
-        for row in self._rows:
-            if row.state == FREE:
-                row.state = FREE_AND_LOCKED
-                return row.rowid
+        if len(self.free_list) > 0:
+            row = self._rows[self.free_list.pop(0)]
+            assert(row.state == FREE)
+            row.state = FREE_AND_LOCKED
+            return row.rowid
         return None
 
     def lock_used_rows(self, row_ids):
@@ -879,20 +911,30 @@ class LpnTable(object):
     def lock_free_rows(self, n):
         row_ids = []
         got = 0
-        for row in self._rows:
-            if row.state == FREE:
-                row.state = FREE_AND_LOCKED
-                row_ids.append(row.rowid)
-                got += 1
 
-                if got == n:
-                    break
+        for index in self.free_list[:n]:
+            row  = self._rows[index]
+            assert(row.state == FREE)
+            row.state = FREE_AND_LOCKED
+            row_ids.append(row.rowid)
+            got += 1
+
+            if got == n:
+                break
+
+        del self.free_list[:n]
         return row_ids
 
     def unlock_free_row(self, rowid):
         """FREE_AND_LOCKED -> FREE"""
         row = self._rows[rowid]
         row.state = FREE
+        self.free_list.append(rowid)
+
+    def free_row(self, rowid):
+        row = self._rows[rowid]
+        row.state = FREE
+        self.free_list.append(rowid)
 
     def unlock_free_rows(self, row_ids):
         for row_id in row_ids:
@@ -985,12 +1027,13 @@ class LpnTable(object):
         return row.rowid
 
     def has_lpn(self, lpn):
-        try:
-            row = self._lpn_to_row.peek(lpn)
-        except KeyError:
-            return False
-        else:
-            return True
+        return self._lpn_to_row.has_key(lpn)
+        # try:
+        #     row = self._lpn_to_row.peek(lpn)
+        # except KeyError:
+        #     return False
+        # else:
+        #     return True
 
     def stats(self):
         return self._count_states()
@@ -1245,25 +1288,31 @@ class GlobalTranslationDirectory(object):
 
         # use some free blocks to be translation blocks
         tmp_blk_mapping = {}
-        for m_vpn in range(total_pages):
-            m_ppn = self.block_pool.next_translation_page_to_program()
-            # Note that we don't actually read or write flash
-            self.add_mapping(m_vpn=m_vpn, m_ppn=m_ppn)
-            # update oob of the translation page
-            self.oob.relocate_trans_page(m_vpn=m_vpn, old_ppn=UNINITIATED,
-                new_ppn=m_ppn, update_time=True)
+        # for m_vpn in range(total_pages):
+        #     m_ppn = self.block_pool.next_translation_page_to_program()
+        #     # Note that we don't actually read or write flash
+        #     self.add_mapping(m_vpn=m_vpn, m_ppn=m_ppn)
+        #     # update oob of the translation page
+        #     self.oob.relocate_trans_page(m_vpn=m_vpn, old_ppn=UNINITIATED,
+        #         new_ppn=m_ppn, update_time=True)
 
     def m_vpn_to_m_ppn(self, m_vpn):
         """
         m_vpn virtual translation page number. It should always be successfull.
         """
-        return self.mapping[m_vpn]
+        if m_vpn in self.mapping:
+            return self.mapping[m_vpn]
+        else:
+            self.add_mapping(m_vpn)
+            return self.mapping[m_vpn]
 
-    def add_mapping(self, m_vpn, m_ppn):
-        if self.mapping.has_key(m_vpn):
-            raise RuntimeError("self.mapping already has m_vpn:{}"\
-                .format(m_vpn))
+    def add_mapping(self, m_vpn):
+        m_ppn = self.block_pool.next_translation_page_to_program()
+        # Note that we don't actually read or write flash
         self.mapping[m_vpn] = m_ppn
+        # update oob of the translation page
+        self.oob.relocate_trans_page(m_vpn=m_vpn, old_ppn=UNINITIATED,
+                new_ppn=m_ppn, update_time=True)
 
     def update_mapping(self, m_vpn, m_ppn):
         self.mapping[m_vpn] = m_ppn
@@ -1434,9 +1483,9 @@ class Cleaner(object):
             )
 
         # limit number of cleaner processes
-        # self.n_cleaners = self.conf.n_channels_per_dev * 64
-        self.n_cleaners = self.conf['n_gc_procs']
-        print 'n_cleaners:', self.n_cleaners
+        self.n_cleaners = self.conf.n_channels_per_dev
+        # self.n_cleaners = self.conf['n_gc_procs']
+        log_msg('n_cleaners:', self.n_cleaners)
         self._block_cleaner_res = simpy.Resource(self.env, capacity=self.n_cleaners)
 
         self.n_victim_per_batch = self.conf.n_channels_per_dev * 2
@@ -1505,15 +1554,21 @@ class Cleaner(object):
         req = self._cleaner_res.request()
         yield req
 
+        if not self.is_cleaning_needed():
+            self._cleaner_res.release(req)
+            return
+
         victim_blocks = VictimBlocks(self.conf, self.block_pool, self.oob)
         self.recorder.append_to_value_list('clean_func_valid_ratio_snapshot',
                 victim_blocks.get_valid_ratio_counter_of_used_blocks())
 
         if self.gc_time_recorded == False:
-            self.recorder.set_result_by_one_key('gc_trigger_timestamp',
+            self.recorder.set_result_by_one_key('gc_first_triggered_timestamp',
                     self.env.now / float(SEC))
             self.gc_time_recorded = True
-            print 'GC time recorded!........!'
+
+        start_time = self.env.now
+        log_msg('[GC Start]', "Used Block Ratio:", self.block_pool.used_ratio(), "Simulator time (ns)", self.env.now)
 
         all_victim_tuples = list(victim_blocks.iterator_verbose())
         batches = utils.group_to_batches(all_victim_tuples, self.n_victim_per_batch)
@@ -1522,6 +1577,11 @@ class Cleaner(object):
             if self.is_stopping_needed():
                 break
             yield self.env.process(self._clean_batch(batch, purpose=PURPOSE_GC))
+
+        end_time = self.env.now
+        log_msg('[GC End]', "Used Block Ratio:", self.block_pool.used_ratio(), "Simulator time (ns)", self.env.now)
+
+        latency_counter["gc"] += [(end_time - start_time)]
 
         self._cleaner_res.release(req)
 
@@ -1564,26 +1624,17 @@ class DataBlockCleaner(object):
 
         self.gcid = 0
 
-    def log(self, blocknum):
+    def log(self, blocknum, valid_ratio, start, end):
         if self.conf['write_gc_log'] is False:
             return
 
-        valid_ratio = self.oob.states.block_valid_ratio(blocknum)
-        if valid_ratio == 0:
-            return
-
-        ppn_start, ppn_end = self.conf.block_to_page_range(blocknum)
-        for ppn in range(ppn_start, ppn_end):
-            try:
-                lpn = self.oob.ppn_to_lpn_or_mvpn(ppn)
-            except KeyError:
-                lpn = 'NA'
-
-            self.recorder.write_file('gc.log',
-                    gcid=self.gcid,
-                    blocknum=blocknum,
-                    lpn=lpn,
-                    valid=self.oob.states.is_page_valid(ppn))
+        self.recorder.write_file('gc.log',
+                gcid=self.gcid,
+                blocknum=blocknum,
+                valid=valid_ratio,
+                start=start,
+                end=end,
+                duration=end-start)
         self.gcid += 1
 
     def clean(self, blocknum, purpose = PURPOSE_GC):
@@ -1594,7 +1645,8 @@ class DataBlockCleaner(object):
         assert blocknum in self.block_pool.used_blocks
         # assert blocknum not in self.block_pool.current_blocks()
 
-        self.log(blocknum)
+        valid_ratio = self.oob.states.block_valid_ratio(blocknum)
+        start_time = self.env.now
 
         ppn_start, ppn_end = self.conf.block_to_page_range(blocknum)
         for ppn in range(ppn_start, ppn_end):
@@ -1605,6 +1657,10 @@ class DataBlockCleaner(object):
             self.flash.erase_pbn_extent(blocknum, 1,
                 tag=self.recorder.get_tag('erase.data.gc', None)))
         self.recorder.count_me("gc", "erase.data.block")
+
+        end_time = self.env.now
+
+        self.log(blocknum, valid_ratio, start_time, end_time)
 
         self.oob.erase_block(blocknum)
         self.block_pool.move_used_data_block_to_free(blocknum)
@@ -1746,12 +1802,13 @@ class TransBlockCleaner(object):
 
 class OutOfBandAreas(object):
     """
-    It is used to hold page state and logical page number of a page.
+    From Wiscsee: It is used to hold page state and logical page number of a page.
     It is not necessary to implement it as list. But the interface should
     appear to be so.  It consists of page state (bitmap) and logical page
     number (dict).  Let's proivde more intuitive interfaces: OOB should accept
     events, and react accordingly to this event. The action may involve state
     and lpn_of_phy_page.
+    Jinghan: I will temporarily keep the data strcutures as it is. Now we only use the p2l mapping
     """
     def __init__(self, confobj):
         self.conf = confobj
@@ -1761,6 +1818,7 @@ class OutOfBandAreas(object):
         self.total_pages = self.flash_num_blocks * self.flash_npage_per_block
 
         # Key data structures
+        # TODO offload bitmap to a separate data structure
         self.states = FlashBitmap2(confobj)
         # ppn->lpn mapping stored in OOB, Note that for translation pages, this
         # mapping is ppn -> m_vpn
@@ -1878,18 +1936,18 @@ class Config(config.ConfigNCQFTL):
     def __init__(self, confdic = None):
         super(Config, self).__init__(confdic)
 
-        local_itmes = {
+        local_items = {
             # number of bytes per entry in mapping_on_flash
             "translation_page_entry_bytes": 4, # 32 bits
             "cache_entry_bytes": 8, # 4 bytes for lpn, 4 bytes for ppn
             "GC_high_threshold_ratio": 0.95,
-            "GC_low_threshold_ratio": 0.9,
+            "GC_low_threshold_ratio": 0.7,
             "over_provisioning": 1.28, #TODO: this is not used
             "mapping_cache_bytes": None, # cmt: cached mapping table
             "do_not_check_gc_setting": False,
             "write_gc_log": True,
             }
-        self.update(local_itmes)
+        self.update(local_items)
         self['segment_bytes'] = 1*TB
 
         # self['keeping_all_tp_entries'] = False
@@ -2007,8 +2065,10 @@ def write_timeline(conf, recorder, op_id, op, arg, start_time, end_time):
             op_id = op_id, op = op, arg = arg,
             start_time = start_time, end_time = end_time)
 
-
-
-
+    else:
+        if op == "read_ext":
+            latency_counter["read"] += [(end_time - start_time) / arg]
+        elif op == "write_ext":
+            latency_counter["write"] += [(end_time - start_time) / arg]
 
 

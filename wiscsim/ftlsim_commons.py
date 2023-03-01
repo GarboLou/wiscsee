@@ -1,5 +1,6 @@
 import simpy
 import random
+from collections import OrderedDict
 
 class Extent(object):
     def __init__(self, lpn_start, lpn_count):
@@ -74,7 +75,7 @@ class NCQSingleQueue(object):
     def __init__(self, ncq_depth, simpy_env):
         self.ncq_depth = ncq_depth
         self.env = simpy_env
-        self.queue = simpy.Store(self.env)
+        self.queue = OrderedDict() #simpy.Store(self.env)
         # ssd need to grab a slot before get item from queue
         self.slots = simpy.Resource(self.env, capacity=ncq_depth)
 
