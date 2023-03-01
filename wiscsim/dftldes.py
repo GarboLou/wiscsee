@@ -1386,14 +1386,35 @@ class VictimBlocks(object):
         return repr(list(self.iterator_verbose()))
 
     def iterator_verbose(self):
-        candidate_tuples = self._candidate_priorityq()
+        # candidate_tuples = self._candidate_priorityq()
+        
+        # MODIFIED
+        candidate_tuples_list = []
+        channel_list = []
+        channel_num = self._conf.n_channels_per_dev
+        # print("\nDEBUG: channel_num is: ",channel_num,"\n")
+        
+        for i in range(channel_num):
+            candidate_tuples_list.append(self._candidate_priorityq(channel_id=i))
+            channel_list.append(i)
+        # print("\n DEBUG: candidate_tuples_list", candidate_tuples_list)
+        
+        channel_sel = 0
+        
         while True:
             try:
-                valid_ratio, block_type, block_num = heapq.heappop(candidate_tuples)
+                channel_id = channel_list[channel_sel]
+                valid_ratio, block_type, block_num = heapq.heappop(candidate_tuples_list[channel_id])
+                channel_sel = (channel_sel + 1) % len(channel_list)
                 yield valid_ratio, block_type, block_num
             except IndexError:
-                # Out of victim blocks
-                raise StopIteration
+                # Out of victim blocks in channel_sek
+                del channel_list[channel_sel]
+                
+                if len(channel_list) == 0:
+                    raise StopIteration
+                else:
+                    channel_sel = (channel_sel + 1) % len(channel_list)
 
     def get_valid_ratio_counter_of_used_blocks(self):
         used_blocks = self._block_pool.used_blocks
@@ -1404,8 +1425,8 @@ class VictimBlocks(object):
             counter[ratio_str] += 1
         return counter
 
-    def _candidate_priorityq(self):
-        candidate_tuples = self._victim_candidates()
+    def _candidate_priorityq(self, channel_id=None):
+        candidate_tuples = self._victim_candidates(channel_id)
         heapq.heapify(candidate_tuples)
         return candidate_tuples
 
@@ -1434,9 +1455,9 @@ class VictimBlocks(object):
 
         return victim_candidates
 
-    def _victim_candidates(self):
-        used_data_blocks = self._block_pool.data_usedblocks
-        used_trans_blocks = self._block_pool.trans_usedblocks
+    def _victim_candidates(self, channel_id=None):
+        used_data_blocks = self._block_pool.data_usedblocks(channel_id=channel_id)
+        used_trans_blocks = self._block_pool.trans_usedblocks(channel_id=channel_id)
 
         candidate_tuples = self._form_tuples(used_data_blocks, self.TYPE_DATA) + \
             self._form_tuples(used_trans_blocks, self.TYPE_TRANS)
@@ -1491,6 +1512,7 @@ class Cleaner(object):
         self.n_victim_per_batch = self.conf.n_channels_per_dev * 2
 
         # only allow one cleaner instance at a time
+        # MODIFIED: capacity=1 to capacity=self.n_cleaners
         self._cleaner_res = simpy.Resource(self.env, capacity=1)
 
         self.gc_time_recorded = False

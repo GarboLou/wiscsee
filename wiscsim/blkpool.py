@@ -29,14 +29,14 @@ class BlockPool(object):
         blocks = self.pool.get_blocks_of_tag(tag=TFREE)
         return blocks
 
-    @property
-    def data_usedblocks(self):
-        blocks = self.pool.get_blocks_of_tag(tag=TDATA)
+    # @property
+    def data_usedblocks(self, channel_id=None):
+        blocks = self.pool.get_blocks_of_tag(tag=TDATA, channel_id=channel_id)
         return blocks
 
-    @property
-    def trans_usedblocks(self):
-        blocks = self.pool.get_blocks_of_tag(tag=TTRANS)
+    # @property
+    def trans_usedblocks(self, channel_id=None):
+        blocks = self.pool.get_blocks_of_tag(tag=TTRANS, channel_id=channel_id)
         return blocks
 
     @property
