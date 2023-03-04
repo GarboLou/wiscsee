@@ -1385,7 +1385,7 @@ class VictimBlocks(object):
     def __str__(self):
         return repr(list(self.iterator_verbose()))
 
-    def iterator_verbose(self):
+    def iterator_verbose(self, cleaning_needed_channel_bitmap=None):
         # candidate_tuples = self._candidate_priorityq()
         
         # MODIFIED
@@ -1395,8 +1395,9 @@ class VictimBlocks(object):
         # print("\nDEBUG: channel_num is: ",channel_num,"\n")
         
         for i in range(channel_num):
-            candidate_tuples_list.append(self._candidate_priorityq(channel_id=i))
-            channel_list.append(i)
+            if (cleaning_needed_channel_bitmap[i] == 1):
+                candidate_tuples_list.append(self._candidate_priorityq(channel_id=i))
+                channel_list.append(i)
         # print("\n DEBUG: candidate_tuples_list", candidate_tuples_list)
         
         channel_sel = 0
@@ -1427,7 +1428,13 @@ class VictimBlocks(object):
 
     def _candidate_priorityq(self, channel_id=None):
         candidate_tuples = self._victim_candidates(channel_id)
+        # candidate_tuples_temp = self._victim_candidates(channel_id)
+        # candidate_tuples = sorted(candidate_tuples_temp, key=lambda x: x[0], reverse=True)
+        # print("not sorted:", candidate_tuples_temp[:10])
+        # print("sorted:", candidate_tuples[:10])
         heapq.heapify(candidate_tuples)
+        candidate_tuples.sort(key=lambda x: x[0])
+        # print("after heapify: ", candidate_tuples)
         return candidate_tuples
 
     def _form_tuples(self, used_blocks, block_type):
@@ -1476,6 +1483,7 @@ class Cleaner(object):
         self.directory = directory
         self.recorder = rec
         self.env = env
+        self.cleaning_needed_channel_bitmap = [0]*self.conf.n_channels_per_dev
 
         self.assert_threshold_sanity()
 
@@ -1540,11 +1548,28 @@ class Cleaner(object):
                     " {}.".format(n_spare_blocks))
 
     def is_cleaning_needed(self):
-        return self.block_pool.used_ratio() > self.conf.GC_high_threshold_ratio
-
+        for i in range(self.conf.n_channels_per_dev):
+            if (self.block_pool.per_channel_used_ratio([i]) > self.conf.GC_high_threshold_ratio):
+                self.cleaning_needed_channel_bitmap[i] = 1
+            else:
+                self.cleaning_needed_channel_bitmap[i] = 0
+        if sum(self.cleaning_needed_channel_bitmap) >= 6:
+            return True
+        else:
+            return False
+                
     def is_stopping_needed(self):
-        return self.block_pool.used_ratio() < self.conf.GC_low_threshold_ratio
-
+        stop_cleaning_bitmap = [0]*self.conf.n_channels_per_dev
+        for i in range(self.conf.n_channels_per_dev):
+            if (self.block_pool.per_channel_used_ratio([i]) < self.conf.GC_low_threshold_ratio):
+                stop_cleaning_bitmap[i] = 1
+            else:
+                stop_cleaning_bitmap[i] = 0
+        if sum(stop_cleaning_bitmap) >= 4:
+            return True
+        else:
+            return False
+        
     def level_wear(self):
         """
         Move victim to a new location
@@ -1558,7 +1583,7 @@ class Cleaner(object):
         victim_blocks = WearLevelingVictimBlocks(self.conf,
                 self.block_pool, self.oob, 0.1 * self.conf.n_blocks_per_dev)
 
-        all_victim_tuples = list(victim_blocks.iterator_verbose())
+        all_victim_tuples = list(victim_blocks.iterator_verbose(self.cleaning_needed_channel_bitmap))
         batches = utils.group_to_batches(all_victim_tuples, self.n_victim_per_batch)
 
         for batch in batches:
@@ -1592,7 +1617,7 @@ class Cleaner(object):
         start_time = self.env.now
         log_msg('[GC Start]', "Used Block Ratio:", self.block_pool.used_ratio(), "Simulator time (ns)", self.env.now)
 
-        all_victim_tuples = list(victim_blocks.iterator_verbose())
+        all_victim_tuples = list(victim_blocks.iterator_verbose(self.cleaning_needed_channel_bitmap))
         batches = utils.group_to_batches(all_victim_tuples, self.n_victim_per_batch)
 
         for batch in batches:

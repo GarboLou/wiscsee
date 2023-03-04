@@ -124,6 +124,10 @@ class BlockPool(object):
     def total_used_blocks(self):
         nfree = self.pool.count_blocks(tag=TFREE)
         return self.conf.n_blocks_per_dev - nfree
+    
+    def per_channel_used_ratio(self, channel=None):
+        nfree = self.pool.count_blocks(tag=TFREE, channels=channel)
+        return (self.conf.n_blocks_per_channel - nfree) / float(self.conf.n_blocks_per_channel)
 
     def num_freeblocks(self):
         nfree = self.pool.count_blocks(tag=TFREE)
