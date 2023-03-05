@@ -29,14 +29,14 @@ class BlockPool(object):
         blocks = self.pool.get_blocks_of_tag(tag=TFREE)
         return blocks
 
-    # @property
-    def data_usedblocks(self, channel_id=None):
-        blocks = self.pool.get_blocks_of_tag(tag=TDATA, channel_id=channel_id)
+    @property
+    def data_usedblocks(self):
+        blocks = self.pool.get_blocks_of_tag(tag=TDATA)
         return blocks
 
-    # @property
-    def trans_usedblocks(self, channel_id=None):
-        blocks = self.pool.get_blocks_of_tag(tag=TTRANS, channel_id=channel_id)
+    @property
+    def trans_usedblocks(self):
+        blocks = self.pool.get_blocks_of_tag(tag=TTRANS)
         return blocks
 
     @property
@@ -46,6 +46,16 @@ class BlockPool(object):
 
         return blocks1 + blocks2
 
+    # MODIFIED: add this
+    def opt_get_data_usedblocks(self, channel_id=None):
+        blocks = self.pool.get_blocks_of_tag(tag=TDATA, channel_id=channel_id)
+        return blocks
+
+    # MODIFIED: add this
+    def opt_get_trans_usedblocks(self, channel_id=None):
+        blocks = self.pool.get_blocks_of_tag(tag=TTRANS, channel_id=channel_id)
+        return blocks
+    
     def get_wear_status(self):
         return self.pool.get_wear_status()
 
@@ -125,6 +135,7 @@ class BlockPool(object):
         nfree = self.pool.count_blocks(tag=TFREE)
         return self.conf.n_blocks_per_dev - nfree
     
+    # MODIFIED: add this function for optimization
     def per_channel_used_ratio(self, channel=None):
         nfree = self.pool.count_blocks(tag=TFREE, channels=channel)
         return (self.conf.n_blocks_per_channel - nfree) / float(self.conf.n_blocks_per_channel)

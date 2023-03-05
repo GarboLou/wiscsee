@@ -43,7 +43,6 @@ class MultiChannelBlockPoolBase(object):
 
     def get_blocks_of_tag(self, tag, channel_id=None):
         ret = []
-        # print('\nDEBUG: channel_id in get_blocks_of_tag', channel_id, '\n')
 
         if channel_id is None:
             channels =  self._channel_pool

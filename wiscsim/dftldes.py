@@ -1392,13 +1392,11 @@ class VictimBlocks(object):
         candidate_tuples_list = []
         channel_list = []
         channel_num = self._conf.n_channels_per_dev
-        # print("\nDEBUG: channel_num is: ",channel_num,"\n")
         
         for i in range(channel_num):
             if (cleaning_needed_channel_bitmap[i] == 1):
                 candidate_tuples_list.append(self._candidate_priorityq(channel_id=i))
                 channel_list.append(i)
-        # print("\n DEBUG: candidate_tuples_list", candidate_tuples_list)
         
         channel_sel = 0
         
@@ -1463,8 +1461,8 @@ class VictimBlocks(object):
         return victim_candidates
 
     def _victim_candidates(self, channel_id=None):
-        used_data_blocks = self._block_pool.data_usedblocks(channel_id=channel_id)
-        used_trans_blocks = self._block_pool.trans_usedblocks(channel_id=channel_id)
+        used_data_blocks = self._block_pool.opt_get_data_usedblocks(channel_id=channel_id)
+        used_trans_blocks = self._block_pool.opt_get_trans_usedblocks(channel_id=channel_id)
 
         candidate_tuples = self._form_tuples(used_data_blocks, self.TYPE_DATA) + \
             self._form_tuples(used_trans_blocks, self.TYPE_TRANS)
