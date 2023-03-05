@@ -1563,7 +1563,7 @@ class Cleaner(object):
                 stop_cleaning_bitmap[i] = 1
             else:
                 stop_cleaning_bitmap[i] = 0
-        if sum(stop_cleaning_bitmap) >= 5:
+        if sum(stop_cleaning_bitmap) >= 8:
             return True
         else:
             return False
