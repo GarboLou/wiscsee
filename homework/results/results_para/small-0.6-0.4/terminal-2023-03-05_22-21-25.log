@@ -1,0 +1,47 @@
+/home/lily/App/pypy2.7-v7.3.11-linux64/site-packages/bidict/compat.py:33: UserWarning: Python 2 support will be dropped in a future release.
+  warn('Python 2 support will be dropped in a future release.')
+[2023-03-05 22:21:25] parsing traces/wdev_2.csv with MSR format
+[2023-03-05 22:21:25] parsed 0 lines
+[2023-03-05 22:21:25] parsed 181265 lines
+[2023-03-05 22:21:25] Total warm-up events 137
+[2023-03-05 22:21:25] Total active events 181266
+[2023-03-05 22:21:25] initializing ssd........... dftldes
+[2023-03-05 22:21:25] n_cleaners: 8
+....Recorder is enabled....
+[2023-03-05 22:21:29] Written (MB) 100 Simulator time (ns) 1403020000
+[2023-03-05 22:21:30] Written (MB) 200 Simulator time (ns) 2790280000
+[2023-03-05 22:21:31] Written (MB) 300 Simulator time (ns) 4175880000
+[2023-03-05 22:21:31] [GC Start] Used Block Ratio: 0.6005859375 Simulator time (ns) 4187880000
+[2023-03-05 22:21:32] [GC End] Used Block Ratio: 0.39453125 Simulator time (ns) 4370920000.0
+[2023-03-05 22:21:33] Written (MB) 400 Simulator time (ns) 5748120000.0
+[2023-03-05 22:21:33] [GC Start] Used Block Ratio: 0.6005859375 Simulator time (ns) 5844120000.0
+[2023-03-05 22:21:34] [GC End] Used Block Ratio: 0.3916015625 Simulator time (ns) 5997160000.0
+[2023-03-05 22:21:35] Written (MB) 500 Simulator time (ns) 7293560000.0
+[2023-03-05 22:21:35] [GC Start] Used Block Ratio: 0.6005859375 Simulator time (ns) 7493560000.0
+[2023-03-05 22:21:35] [GC End] Used Block Ratio: 0.3935546875 Simulator time (ns) 7656500000.0
+[2023-03-05 22:21:36] Written (MB) 600 Simulator time (ns) 8841700000.0
+[2023-03-05 22:21:36] [GC Start] Used Block Ratio: 0.6005859375 Simulator time (ns) 9131300000.0
+[2023-03-05 22:21:36] [GC End] Used Block Ratio: 0.3876953125 Simulator time (ns) 9278300000.0
+[2023-03-05 22:21:37] Written (MB) 700 Simulator time (ns) 10379500000.0
+[2023-03-05 22:21:37] [GC Start] Used Block Ratio: 0.6005859375 Simulator time (ns) 10780300000.0
+[2023-03-05 22:21:38] [GC End] Used Block Ratio: 0.3935546875 Simulator time (ns) 10987840000.0
+[2023-03-05 22:21:39] Written (MB) 800 Simulator time (ns) 11941320000.0
+[2023-03-05 22:21:39] [GC Start] Used Block Ratio: 0.6005859375 Simulator time (ns) 12449320000.0
+[2023-03-05 22:21:39] [GC End] Used Block Ratio: 0.388671875 Simulator time (ns) 12596700000.0
+[2023-03-05 22:21:40] Written (MB) 900 Simulator time (ns) 13475500000.0
+[2023-03-05 22:21:40] [GC Start] Used Block Ratio: 0.6005859375 Simulator time (ns) 14089900000.0
+[2023-03-05 22:21:40] [GC End] Used Block Ratio: 0.3896484375 Simulator time (ns) 14264160000.0
+[2023-03-05 22:21:41] Written (MB) 1000 Simulator time (ns) 15037260000.0
+[2023-03-05 22:21:41] [GC Start] Used Block Ratio: 0.6005859375 Simulator time (ns) 15752860000.0
+[2023-03-05 22:21:42] [GC End] Used Block Ratio: 0.390625 Simulator time (ns) 15906320000.0
+[2023-03-05 22:21:42] Written (MB) 1100 Simulator time (ns) 16581120000.0
+[2023-03-05 22:21:43] [GC Start] Used Block Ratio: 0.6005859375 Simulator time (ns) 17393920000.0
+[2023-03-05 22:21:43] [GC End] Used Block Ratio: 0.3916015625 Simulator time (ns) 17568240000.0
+[2023-03-05 22:21:43] Written (MB) 1200 Simulator time (ns) 18145440000.0
+[2023-03-05 22:21:44] [GC Start] Used Block Ratio: 0.6005859375 Simulator time (ns) 19059040000.0
+[2023-03-05 22:21:44] [GC End] Used Block Ratio: 0.390625 Simulator time (ns) 19221480000.0
+[2023-03-05 22:21:45] Written (MB) 1300 Simulator time (ns) 19697880000.0
+[2023-03-05 22:21:45] [GC Start] Used Block Ratio: 0.6005859375 Simulator time (ns) 20719880000.0
+[2023-03-05 22:21:46] [GC End] Used Block Ratio: 0.390625 Simulator time (ns) 20880160000.0
+[2023-03-05 22:21:46] Written (MB) 1400 Simulator time (ns) 21249760000.0
+[2023-03-05 22:21:46] Stop Simulation
